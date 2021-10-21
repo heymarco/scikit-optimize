@@ -84,6 +84,7 @@ class Optimizer(object):
         Function to minimize over the posterior distribution. Can be either
 
         - `"LCB"` for lower confidence bound.
+        - `"ALCB"` for adaptive lower confidence bound.
         - `"EI"` for negative expected improvement.
         - `"PI"` for negative probability of improvement.
         - `"gp_hedge"` Probabilistically choose one of the above three
@@ -181,14 +182,14 @@ class Optimizer(object):
         self.acq_func = acq_func
         self.acq_func_kwargs = acq_func_kwargs
 
-        allowed_acq_funcs = ["gp_hedge", "EI", "LCB", "PI", "EIps", "PIps"]
+        allowed_acq_funcs = ["gp_hedge", "EI", "LCB", "ALCB", "PI", "EIps", "PIps"]
         if self.acq_func not in allowed_acq_funcs:
             raise ValueError("expected acq_func to be in %s, got %s" %
                              (",".join(allowed_acq_funcs), self.acq_func))
 
         # treat hedging method separately
         if self.acq_func == "gp_hedge":
-            self.cand_acq_funcs_ = ["EI", "LCB", "PI"]
+            self.cand_acq_funcs_ = ["EI", "LCB", "ALCB", "PI"]
             self.gains_ = np.zeros(3)
         else:
             self.cand_acq_funcs_ = [self.acq_func]

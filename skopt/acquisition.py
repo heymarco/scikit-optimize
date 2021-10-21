@@ -46,6 +46,14 @@ def _gaussian_acquisition(X, model, y_opt=None, acq_func="LCB",
         else:
             acq_vals = func_and_grad
 
+    if acq_func == "ALCB":
+        exploration_prob = acq_func_kwargs.get("exploration_prob", 0.1)
+        func_and_grad = gaussian_adaptive_lcb(X, model, exploration_prob, return_grad)
+        if return_grad:
+            acq_vals, acq_grad = func_and_grad
+        else:
+            acq_vals = func_and_grad
+
     elif acq_func in ["EI", "PI", "EIps", "PIps"]:
         if acq_func in ["EI", "EIps"]:
             func_and_grad = gaussian_ei(X, model, y_opt, xi, return_grad)
@@ -144,6 +152,73 @@ def gaussian_lcb(X, model, kappa=1.96, return_grad=False):
             if kappa == "inf":
                 return -std
             return mu - kappa * std
+
+
+def gaussian_adaptive_lcb(X, model, exploration_prob: float = 0.1, return_grad=False):
+    """
+    Use the lower confidence bound to estimate the acquisition
+    values.
+
+    The trade-off between exploitation and exploration is left to
+    be controlled by the user through the parameter ``kappa``.
+
+    Parameters
+    ----------
+    X : array-like, shape (n_samples, n_features)
+        Values where the acquisition function should be computed.
+
+    model : sklearn estimator that implements predict with ``return_std``
+        The fit estimator that approximates the function through the
+        method ``predict``.
+        It should have a ``return_std`` parameter that returns the standard
+        deviation.
+
+    kappa : float, default 1.96 or 'inf'
+        Controls how much of the variance in the predicted values should be
+        taken into account. If set to be very high, then we are favouring
+        exploration over exploitation and vice versa.
+        If set to 'inf', the acquisition function will only use the variance
+        which is useful in a pure exploration setting.
+        Useless if ``method`` is not set to "LCB".
+
+    return_grad : boolean, optional
+        Whether or not to return the grad. Implemented only for the case where
+        ``X`` is a single sample.
+
+    Returns
+    -------
+    values : array-like, shape (X.shape[0],)
+        Acquisition function values computed at X.
+
+    grad : array-like, shape (n_samples, n_features)
+        Gradient at X.
+    """
+    # Compute posterior.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+
+        assert 1.0 >= exploration_prob >= 0.0
+
+        def compute_kappa(mu, std):
+            num_candidates = len(mu)
+            kappa_candidates = [(mu[a] - mu[b]) / (std[b] - std[a])
+                                for a in range(num_candidates) for b in range(a+1, num_candidates, 1)]
+            explore = np.random.uniform() < exploration_prob
+            # we change kappa very slightly s.th. we explore vs exploit without changing x too much
+            kappa_candidates += 0.0001 if explore else -0.0001
+            return np.max(kappa_candidates)
+
+        if return_grad:
+            mu, std, mu_grad, std_grad = model.predict(
+                X, return_std=True, return_mean_grad=True,
+                return_std_grad=True)
+            k = compute_kappa(mu, std)
+            return mu - k * std, mu_grad - k * std_grad
+
+        else:
+            mu, std = model.predict(X, return_std=True)
+            k = compute_kappa(mu, std)
+            return mu - k * std
 
 
 def gaussian_pi(X, model, y_opt=0.0, xi=0.01, return_grad=False):
