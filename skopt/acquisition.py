@@ -46,9 +46,13 @@ def _gaussian_acquisition(X, model, y_opt=None, acq_func="LCB",
         else:
             acq_vals = func_and_grad
 
-    if acq_func == "ALCB":
-        exploration_prob = acq_func_kwargs.get("exploration_prob", 0.1)
-        func_and_grad = gaussian_adaptive_lcb(X, model, exploration_prob, return_grad)
+    elif acq_func == "ALCB":
+        exploration_prob = acq_func_kwargs.get("exploration_prob", 0.5)
+        minimum_kappa = acq_func_kwargs.get("minimum_kappa", 0.5)
+        func_and_grad = gaussian_adaptive_lcb(X, model,
+                                              minimum_kappa=minimum_kappa,
+                                              exploration_prob=exploration_prob,
+                                              return_grad=return_grad)
         if return_grad:
             acq_vals, acq_grad = func_and_grad
         else:
@@ -154,7 +158,7 @@ def gaussian_lcb(X, model, kappa=1.96, return_grad=False):
             return mu - kappa * std
 
 
-def gaussian_adaptive_lcb(X, model, exploration_prob: float = 0.1, return_grad=False):
+def gaussian_adaptive_lcb(X, model, minimum_kappa: float = 0.5, exploration_prob: float = 0.5, return_grad=False):
     """
     Use the lower confidence bound to estimate the acquisition
     values.
@@ -173,13 +177,16 @@ def gaussian_adaptive_lcb(X, model, exploration_prob: float = 0.1, return_grad=F
         It should have a ``return_std`` parameter that returns the standard
         deviation.
 
-    kappa : float, default 1.96 or 'inf'
+    minimum_kappa : float, default 1.96 or 'inf'
         Controls how much of the variance in the predicted values should be
         taken into account. If set to be very high, then we are favouring
         exploration over exploitation and vice versa.
         If set to 'inf', the acquisition function will only use the variance
         which is useful in a pure exploration setting.
         Useless if ``method`` is not set to "LCB".
+
+    exploration_prob: float, default 0.1
+        The probability that we explore instead of exploit the current knowledge
 
     return_grad : boolean, optional
         Whether or not to return the grad. Implemented only for the case where
@@ -200,13 +207,31 @@ def gaussian_adaptive_lcb(X, model, exploration_prob: float = 0.1, return_grad=F
         assert 1.0 >= exploration_prob >= 0.0
 
         def compute_kappa(mu, std):
-            num_candidates = len(mu)
-            kappa_candidates = [(mu[a] - mu[b]) / (std[b] - std[a])
-                                for a in range(num_candidates) for b in range(a+1, num_candidates, 1)]
+            # find minimum mu and corresponding std from GP
+            mu_star_index = np.argmin(mu)
+            mu_star = mu[mu_star_index]
+            std_star = std[mu_star_index]
+            # filter dominated set
+            fltr = std > std_star
+            fltr[mu_star_index] = False  # filter out mu_star
+            mu_filtered = mu[fltr]
+            std_filtered = std[fltr]
+            # compute intersections with mu_star - kappa*std_star
+            kappa_intersects = np.asarray([(mu_star - mu_i) / (std_star - std_i)
+                                           for mu_i, std_i in zip(mu_filtered, std_filtered)])
+            # find smallest kappa
+            if len(kappa_intersects) == 0:
+                kappa = minimum_kappa  # a default value, in case we don't have an intersection
+            else:
+                kappa = np.min(kappa_intersects)
+            assert kappa > 0
+
+            kappa = np.max([kappa, minimum_kappa])
+
+            # For exploration, we increase the value of kappa slightly which leads to exploration
             explore = np.random.uniform() < exploration_prob
-            # we change kappa very slightly s.th. we explore vs exploit without changing x too much
-            kappa_candidates += 0.0001 if explore else -0.0001
-            return np.max(kappa_candidates)
+            kappa += 0.001 if explore else -0.001
+            return kappa
 
         if return_grad:
             mu, std, mu_grad, std_grad = model.predict(
