@@ -48,7 +48,7 @@ def _gaussian_acquisition(X, model, y_opt=None, acq_func="LCB",
 
     elif acq_func == "ALCB":
         exploration_prob = acq_func_kwargs.get("exploration_prob", 0.5)
-        minimum_kappa = acq_func_kwargs.get("minimum_kappa", 0.5)
+        minimum_kappa = acq_func_kwargs.get("kappa", 0.5)
         func_and_grad = gaussian_adaptive_lcb(X, model,
                                               minimum_kappa=minimum_kappa,
                                               exploration_prob=exploration_prob,
