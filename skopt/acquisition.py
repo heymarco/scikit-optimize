@@ -214,7 +214,7 @@ def gaussian_adaptive_lcb(X, model, minimum_kappa: float = 0.5, exploration_prob
             mu = np.asarray(mu)[valid_indices]
             std = np.asarray(std)[valid_indices]
             # find minimum mu and corresponding std from GP
-            mu_star_index = np.argmin(mu)
+            mu_star_index = np.argmin(mu - minimum_kappa * std)  # this is our reference point
             mu_star = mu[mu_star_index]
             std_star = std[mu_star_index]
             # filter dominated set
@@ -233,7 +233,7 @@ def gaussian_adaptive_lcb(X, model, minimum_kappa: float = 0.5, exploration_prob
             if kappa == 0:
                 logging.warn("Kappa = 0; this should not happen...q")
 
-            kappa = np.max([kappa, minimum_kappa])
+            assert kappa < minimum_kappa
 
             # For exploration, we increase the value of kappa slightly which leads to exploration
             explore = np.random.uniform() < exploration_prob
