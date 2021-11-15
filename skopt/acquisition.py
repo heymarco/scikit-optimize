@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 import warnings
 
@@ -207,6 +209,10 @@ def gaussian_adaptive_lcb(X, model, minimum_kappa: float = 0.5, exploration_prob
         assert 1.0 >= exploration_prob >= 0.0
 
         def compute_kappa(mu, std):
+            # remove already evaluated points
+            valid_indices = [i for i in range(len(std)) if std[i] > 0.0]
+            mu = np.asarray(mu)[valid_indices]
+            std = np.asarray(std)[valid_indices]
             # find minimum mu and corresponding std from GP
             mu_star_index = np.argmin(mu)
             mu_star = mu[mu_star_index]
@@ -224,7 +230,8 @@ def gaussian_adaptive_lcb(X, model, minimum_kappa: float = 0.5, exploration_prob
                 kappa = minimum_kappa  # a default value, in case we don't have an intersection
             else:
                 kappa = np.min(kappa_intersects)
-            assert kappa > 0
+            if kappa == 0:
+                logging.warn("Kappa = 0; this should not happen...q")
 
             kappa = np.max([kappa, minimum_kappa])
 
