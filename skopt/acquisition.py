@@ -231,9 +231,12 @@ def gaussian_adaptive_lcb(X, model, minimum_kappa: float = 0.5, exploration_prob
             else:
                 kappa = np.min(kappa_intersects)
             if kappa == 0:
-                logging.warn("Kappa = 0; this should not happen...q")
-
-            assert kappa >= minimum_kappa
+                logging.warn("Kappa = 0; this should not happen...")
+            if kappa < minimum_kappa:
+                logging.warn("We computed kappa = {} although min-kappa = {}. This should not happen!".format(
+                    kappa, minimum_kappa
+                ))
+                kappa = minimum_kappa
 
             # For exploration, we increase the value of kappa slightly which leads to exploration
             explore = np.random.uniform() < exploration_prob
